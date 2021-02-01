@@ -5,11 +5,16 @@ from rest_framework.viewsets import ModelViewSet
 
 from store.models import Book
 from store.serializers import BooksSerializer
-from rest_framework.viewsets import ModelViewSet
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from rest_framework.viewsets import ModelViewSet, GenericViewSet
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
 from rest_framework.filters import SearchFilter, OrderingFilter
+from rest_framework.mixins import UpdateModelMixin
 
 from store.permissions import IsOwnerOrStaffReadOnly
+
+from store.models import UserBookRelation
+
+from store.serializers import UserBookRelationSerializer
 
 
 class BookViewSet(ModelViewSet):
@@ -27,6 +32,16 @@ class BookViewSet(ModelViewSet):
         serializer.save()
 
 
+class UserBookRelationView(UpdateModelMixin, GenericViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = UserBookRelation.objects.all()
+    serializer_class = UserBookRelationSerializer
+    lookup_field = 'book'
+
+    def get_object(self):
+        obj, _ = UserBookRelation.objects.get_or_create(user=self.request.user, book_id=self.kwargs['book'])
+        return obj
+
+
 def auth(request):
     return render(request, 'oauth.html')
-
