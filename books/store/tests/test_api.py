@@ -2,6 +2,8 @@ import json
 
 from django.urls import reverse
 from django.contrib.auth.models import User
+from django.db.models import Count, Case, When, Avg
+
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -22,15 +24,23 @@ class BooksApiTestCase(APITestCase):
         url = reverse('book-list')
         print(url)
         response = self.client.get(url)
-        serializer_data = BooksSerializer([self.book_1, self.book_2, self.book_3], many=True).data
+        books = Book.objects.all().annotate(
+            annotated_likes=Count(Case(When(userbookrelation__like=True, then=1))),
+            rating=Avg('userbookrelation__rate')
+        ).order_by('id')
+        serializer_data = BooksSerializer(books, many=True).data
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertEqual(serializer_data, response.data)
         print(response.data)
 
     def test_get_search(self):
         url = reverse('book-list')
+        books = Book.objects.filter(id__in=[self.book_1.id, self.book_2.id]).annotate(
+            annotated_likes=Count(Case(When(userbookrelation__like=True, then=1))),
+            rating=Avg('userbookrelation__rate')
+        ).order_by('id')
         response = self.client.get(url, data={'search': 'Author 1'})
-        serializer_data = BooksSerializer([self.book_1, self.book_2], many=True).data
+        serializer_data = BooksSerializer(books, many=True).data
         self.assertEqual(status.HTTP_200_OK, response.status_code)
         self.assertEqual(serializer_data, response.data)
 
@@ -127,15 +137,13 @@ class BooksRelationTestCase(APITestCase):
         self.book_1.refresh_from_db()
         self.assertEqual(3, relation.rate)
 
-    # def test_rate_wrong(self):
-    #     url = reverse('userbookrelation-detail', args=(self.book_1.id,))
-    #     data = {
-    #         "rate": 6
-    #     }
-    #     json_data = json.dumps(data)
-    #     self.client.force_login(self.user)
-    #     response = self.client.patch(url, data=json_data, content_type='application/json')
-    #     self.assertEqual(status.HTTP_200_OK, response.status_code, response.data)
-    #     relation = UserBookRelation.objects.get(user=self.user, book=self.book_1)
-    #     self.book_1.refresh_from_db()
-    #     self.assertEqual(3, relation.rate)
+    def test_rate_wrong(self):
+        url = reverse('userbookrelation-detail', args=(self.book_1.id,))
+        data = {
+            "rate": 6
+        }
+        json_data = json.dumps(data)
+        self.client.force_login(self.user)
+        response = self.client.patch(url, data=json_data, content_type='application/json')
+        self.assertEqual(status.HTTP_400_BAD_REQUEST, response.status_code, response.data)
+
